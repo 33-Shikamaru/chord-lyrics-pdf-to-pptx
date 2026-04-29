@@ -54,8 +54,8 @@ def normalize_pdf_text(text):
     text = re.sub(r"[\.·•]+(?=[^\w\s])", " ", text)
     text = re.sub(r"(?<=[^\w\s])[\.·•]+", " ", text)
 
-    # Remove dot-only lines
-    text = re.sub(r"^\s*([\.·•]\s*)+\s*\n?", "", text, flags=re.MULTILINE)
+    # Remove dot in dot-only lines
+    text = re.sub(r"^[ \t]*[\.·•]+[ \t]*$", "", text, flags=re.MULTILINE)
     
     # Fix special unicode spaces
     text = text.replace("\u00A0", " ")
@@ -188,31 +188,14 @@ def highlight_chords(text):
 
     return re.sub(rf"\[({CHORD_PATTERN})\]", repl, text)
 
-def split_slides(text, max_lines=4):
-    lines = [l for l in text.split("\n") if l.strip()]
-    slides = []
-    current_slide = []
-    
-    for line in lines:
-        # Detect section headers
-        if SECTION_REGEX.match(line):
-            if current_slide:
-                slides.append("\n".join(current_slide))
-                current_slide = []
+def split_slides(text):
+    # Manually split slides using --- delimiter
+    slides = re.split(r"\n\s*---\s*\n", text.strip())
+    return [s.strip() for s in slides if s.strip()]
 
-            # Add section title as its own slide
-            slides.append(line.upper())
-        else:
-            current_slide.append(line)
-
-            if len(current_slide) >= max_lines:
-                slides.append("\n".join(current_slide))
-                current_slide = []
-
-    if current_slide:
-        slides.append("\n".join(current_slide))
-
-    return slides
+def split_sections(text):
+    sections = re.split(r"\n\s*===\s*\n", text.strip())
+    return [s.strip() for s in sections if s.strip()]
 
 def create_ppt(slides):
     prs = Presentation()
@@ -256,122 +239,50 @@ if raw_text:
     with col1:
         st.subheader("Editable Text")
 
-        transpose = st.slider("Transpose", -6, 6, 0)
-
-        # Normalize text
-        raw_text = normalize_pdf_text(raw_text)
-
-        # Initialize text
+        # Intialize text box once
         if "edited_text" not in st.session_state:
-            st.session_state.edited_text = raw_text
-
-        # Convert button
-        if st.button("Convert to Inline Chords"):
-            st.sfession_state.edited_text = convert_to_inline(st.session_state.edited_text)
-
-        # Detect sections
-        sections = detect_sections(st.session_state.edited_text)
-        updated_sections = []
-
-        # Render UI
-        for i, section in enumerate(sections):
-            st.markdown(f"### Section {i+1}")
-
-            # Use monospace font in Editable Text area
-            st.markdown("""
-                <style>
-                textarea {
-                    font-family: monospace !important;
-                    white-space: pre !important;
-                }
-                </style>
-                """, unsafe_allow_html=True
-            )
-            
-            new_label = st.text_input(
-                "Section",
-                value=section["label"],
-                key=f"label_{i}"
-            )
-
-            new_notes = st.text_input(
-                "MD Notes (optional)",
-                value=section.get("notes", ""),
-                key=f"notes_{i}"
-            )
-
-            content = st.text_area(
-                "Content",
-                value="\n".join(section["lines"]),
-                key=f"content_{i}",
-                height=150
-            )
-
-            updated_sections.append({
-                "label": new_label.strip(),
-                "notes": new_notes.strip(),
-                "lines": content.split("\n")
-            })
-
-        # Add section button
-        if st.button("➕ Add Section"):
-            next_num = len(sections) + 1
-            st.session_state.edited_text += f"\n\nVerse {next_num}\n\n"
-            st.rerun()
+            st.session_state.edited_text = normalize_pdf_text(raw_text)
         
-        # Rebuild cleaned text
-        cleaned_text = ""
-        for section in updated_sections:
-            label_line = section["label"]
+        # Dynamically adjust box height based on content
+        lines = st.session_state.edited_text.count("\n") + 1
+        height = min(1000, max(400, lines * 24))
 
-            if section["notes"]:
-                label_line += f"\n{section['notes']}"
+        edited_text = st.text_area(
+            "Edit slides (use --- for slide breaks)",
+            value=st.session_state.edited_text,
+            height=height
+        )
+    
+        st.session_state.edited_text = edited_text
 
-            cleaned_text += label_line + "\n"
+        # Actions
+        #transpose = st.slider("Transpose", -6, 6, 0)
 
-            cleaned_text += "\n".join([l for l in section["lines"] if l.strip()]) + "\n\n"
+        colA, colB = st.columns(2)
 
-        # Save
-        st.session_state.edited_text = cleaned_text.strip()
+        #with colA:
+            # if st.button("Convert to Inline Chords", key="convert"):
+            #     st.session_state.edited_text = convert_to_inline(
+            #         st.session_state.edited_text
+            #     )
+            #     st.rerun()
 
+       # with colB:
+            
     # Apply transpose
-    processed_text = transpose_text(st.session_state.edited_text, transpose)
+    #processed_text = transpose_text(st.session_state.edited_text, #transpose)
 
     # Step 3: Preview Slides
     with col2:
         st.subheader("Slide Preview")
 
-        max_lines = st.selectbox("Lines per slide", [3, 4, 5], index=1)
+        slides = split_slides(st.session_state.edited_text)
         
-        # Build slides from structured sections
-        slides = []
-        for section in sections:
-            slide_lines = []
-            slide_lines.append(section["label"])
-
-            if section["notes"]:
-                slide_lines.append(f"{section['notes']}")
-
-            for line in section["lines"]:
-                if isinstance(line, dict):
-                    slide_lines.append(line["text"])
-                else:
-                    slide_lines.append(line)
-            
-            slides.append("\n".join(slide_lines))
-        
-        # Apply slide splitting
-        final_slides = []
-        for slide in slides:
-            final_slides.extend(split_slides(slide, max_lines=max_lines))
-
-        # Render slides    
         for i, slide in enumerate(slides):
             st.markdown(f"**Slide {i+1}**")
             
             slide_html = highlight_chords(slide).replace("\n", "<br>")
 
-            # Match Editable Text
             st.markdown(
                 f"""
                 <div style="
@@ -388,11 +299,6 @@ if raw_text:
                 unsafe_allow_html=True
             )
 
-            # st.markdown(
-            #     f"<div style='background-color:black; padding:20px; font-size:16px'>{highlight_chords(slide_html)}</div>",
-            #     unsafe_allow_html=True
-            # )
-
     # Step 4: Export
     st.header("Step 3 — Export")
 
@@ -406,6 +312,3 @@ if raw_text:
                 file_name="slides.pptx",
                 mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
             )
-
-# last updated Apr 29 11:39am
-# added regex variables
