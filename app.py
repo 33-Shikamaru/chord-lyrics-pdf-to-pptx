@@ -10,6 +10,7 @@ import streamlit as st
 import pdfplumber
 import re
 from pptx import Presentation
+import time
 
 
 # --------------- Utilities --------------
@@ -201,8 +202,12 @@ def highlight_chords(text):
     return re.sub(rf"\[({CHORD_PATTERN})\]", repl, text)
 
 def split_slides(text):
-    # Manually split slides using --- delimiter
-    slides = re.split(r"\n\s*---\s*\n", text.strip())
+    # Normalize trailing spaces
+    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
+
+    # Split on --- lines
+    slides = re.split(r"(?m)^\s*---\s*$", text)
+
     return [s.strip() for s in slides if s.strip()]
 
 def split_sections(text):
@@ -262,10 +267,17 @@ if raw_text:
         edited_text = st.text_area(
             "Edit slides (use --- for slide breaks)",
             value=st.session_state.edited_text,
-            height=height
+            height=height,
+            key="editor"
         )
     
         st.session_state.edited_text = edited_text
+
+        # Capture time to prevent excessive re-renders during typing
+        if "last_edit_time" not in st.session_state:
+            st.session_state.last_edit_time = 0
+
+        st.session_state.last_edit_time = time.time()
 
         # Actions
         #transpose = st.slider("Transpose", -6, 6, 0)
@@ -288,11 +300,36 @@ if raw_text:
     with col2:
         st.subheader("Slide Preview")
 
-        slides = split_slides(st.session_state.edited_text)
+        # Get time since last edit
+        last_edit_time = st.session_state.get("last_edit_time", 0)
+        last_good_text = st.session_state.get("last_good_text", edited_text)
+
+        if time.time() - last_edit_time > 0.3:
+            text_to_use = edited_text
+            st.session_state["last_good_text"] = edited_text
+        else:
+            text_to_use = last_good_text
+
+        slides = split_slides(text_to_use)
         
         for i, slide in enumerate(slides):
-            st.markdown(f"**Slide {i+1}**")
-            
+            # Add a separator
+            st.markdown(
+                f"""
+                <div style="
+                    text-align:center;
+                    color:#888;
+                    font-size:12px;
+                    margin:20px 0 10px 0;
+                    font-family: monospace;
+                ">
+                    ──────── Slide {i+1} ────────
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            # Add text box
             slide_html = highlight_chords(slide).replace("\n", "<br>")
 
             st.markdown(
