@@ -182,6 +182,18 @@ def detect_sections(text):
 
     return structured
 
+def load_css():
+    st.markdown("""
+    <style>
+    textarea {
+        font-family: "Courier New", monospace !important;
+        font-size: 16px !important;
+        line-height: 1.4 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+load_css()
+
 def highlight_chords(text):
     def repl(match):
         return f"<span style='color:#E2B801'>{match.group()}</span>"
