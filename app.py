@@ -191,6 +191,40 @@ def load_css():
         font-size: 16px !important;
         line-height: 1.4 !important;
     }
+
+    .preview-container {
+        overflow-y: auto;
+        padding-right: 10px;
+        border: 1px solid #333;
+        border-radius: 8px;
+    }
+
+    .preview-container::-webkit-scrollbar {
+        width: 6px;
+    }
+                
+    .preview-container::-webkit-scrollbar-thumb {
+        background: #555;
+        border-radius: 4px;
+    }
+                
+    .slide-separator {
+        text-align: center;
+        color: #888;
+        font-size: 12px;
+        margin: 20px 0 10px 0;
+    }
+
+    .slide-box {
+        background-color: black;
+        padding: 20px;
+        font-size: 16px;
+        font-family: monospace;
+        line-height: 1.3;
+        margin-bottom: 10px;
+        border-radius: 6px;
+    }    
+    
     </style>
     """, unsafe_allow_html=True)
 load_css()
@@ -264,12 +298,20 @@ if raw_text:
         lines = st.session_state.edited_text.count("\n") + 1
         height = min(1000, max(400, lines * 24))
 
+        st.info("""
+        **Tips**
+        - Use `---` for slide breaks 
+        - Chord alignment off? Try zooming out or widening the window
+        """)
+
         edited_text = st.text_area(
-            "Edit slides (use --- for slide breaks)",
+            "Edit text here:",
             value=st.session_state.edited_text,
             height=height,
             key="editor"
         )
+
+        
     
         st.session_state.edited_text = edited_text
 
@@ -311,42 +353,25 @@ if raw_text:
             text_to_use = last_good_text
 
         slides = split_slides(text_to_use)
-        
+        slides_html= ""
+
         for i, slide in enumerate(slides):
-            # Add a separator
-            st.markdown(
-                f"""
-                <div style="
-                    text-align:center;
-                    color:#888;
-                    font-size:12px;
-                    margin:20px 0 10px 0;
-                    font-family: monospace;
-                ">
-                    ──────── Slide {i+1} ────────
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            formatted_slide = highlight_chords(slide).replace("\n", "<br>")
 
-            # Add text box
-            slide_html = highlight_chords(slide).replace("\n", "<br>")
+            # Create a slide separator
+            slides_html += f"""<div class="slide-separator">
+            ──────── Slide {i+1} ────────
+            </div>
+            <div class="slide-box">
+            {formatted_slide}
+            </div>"""
 
-            st.markdown(
-                f"""
-                <div style="
-                    background-color:black;
-                    padding:20px;
-                    font-size:16px;
-                    font-family: monospace;
-                    white-space: pre;
-                    line-height: 1.3;
-                ">
-                {slide_html}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        # Render Slide Preview
+        st.markdown(f"""<div class="preview-container" style="height:{height}px;">
+        {slides_html}
+        </div>""",
+            unsafe_allow_html=True
+        )
 
     # Step 4: Export
     st.header("Step 3 — Export")
