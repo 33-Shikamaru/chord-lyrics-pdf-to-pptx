@@ -223,20 +223,18 @@ def load_css():
         padding: 20px;
         font-size: 16px;
         font-family: monospace;
+        white-space: pre;
         line-height: 1.3;
-        margin-bottom: 10px;
+        #margin-bottom: 10px;
         border-radius: 6px;
-    }    
-    
+        #text-align: left;
+    }
+    .slide-box div {
+        white-space: pre;                
+    }
     </style>
     """, unsafe_allow_html=True)
 load_css()
-
-def highlight_chords(text):
-    def repl(match):
-        return f"<span style='color:#E2B801'>{match.group()}</span>"
-
-    return re.sub(rf"\[({CHORD_PATTERN})\]", repl, text)
 
 def split_slides(text):
     # Normalize trailing spaces
@@ -247,9 +245,25 @@ def split_slides(text):
 
     return [s.strip() for s in slides if s.strip()]
 
-def split_sections(text):
-    sections = re.split(r"\n\s*===\s*\n", text.strip())
-    return [s.strip() for s in sections if s.strip()]
+def format_slides(text):
+    lines = text.split("\n")
+    cleaned = []
+
+    for line in lines:
+        # Force section headers to left align and leave everything else as is
+        if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", line, re.IGNORECASE):
+            line = line.lstrip()
+        
+        # Highlight chords
+        line = re.sub(
+            rf"\[({CHORD_PATTERN})\]",
+            lambda m: f"<span style='color:#E2B801'>{m.group()}</span>",
+            line)
+
+        # Wrap each line
+        cleaned.append(f"<div>{line or '&nbsp;'}</div>")
+
+    return "".join(cleaned)
 
 def create_ppt(slides):
     prs = Presentation()
@@ -303,7 +317,7 @@ if raw_text:
 
         st.info("""
         **Tips**
-        - Use `---` for slide breaks 
+        - To insert a slide break, use `---`followed by ⌘ + return (on Mac keyboard)
         - Chord alignment off? Try zooming out or widening the window
         """)
 
@@ -314,8 +328,6 @@ if raw_text:
             key="editor"
         )
 
-        
-    
         st.session_state.edited_text = edited_text
 
         # Capture time to prevent excessive re-renders during typing
@@ -323,23 +335,6 @@ if raw_text:
             st.session_state.last_edit_time = 0
 
         st.session_state.last_edit_time = time.time()
-
-        # Actions
-        #transpose = st.slider("Transpose", -6, 6, 0)
-
-        colA, colB = st.columns(2)
-
-        #with colA:
-            # if st.button("Convert to Inline Chords", key="convert"):
-            #     st.session_state.edited_text = convert_to_inline(
-            #         st.session_state.edited_text
-            #     )
-            #     st.rerun()
-
-       # with colB:
-            
-    # Apply transpose
-    #processed_text = transpose_text(st.session_state.edited_text, #transpose)
 
     # Step 3: Preview Slides
     with col2:
@@ -359,8 +354,10 @@ if raw_text:
         slides_html= ""
 
         for i, slide in enumerate(slides):
-            formatted_slide = highlight_chords(slide).replace("\n", "<br>")
+            formatted_slide = format_slides(slide)
 
+            st.code(repr(slide))
+        
             # Create a slide separator
             slides_html += f"""<div class="slide-separator">
             ──────── Slide {i+1} ────────
