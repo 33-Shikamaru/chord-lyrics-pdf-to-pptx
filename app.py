@@ -45,19 +45,22 @@ def extract_text_from_pdf(file):
     return text
 
 def normalize_pdf_text(text):
+    # Remove dot in dot-only lines
+    text = re.sub(r"^[ \t]*[\.·•]+[ \t]*$", "", text, flags=re.MULTILINE)
+
+    # Replace leading dot(s) with space(s)
+    text = re.sub(r"^(\s*)[\.·•]+", lambda m: m.group(1) + " " * len(m.group(0).lstrip()), text, flags=re.MULTILINE)
+
     # Replace long runs of dots with spaces
     text = re.sub(r"[\.·•]{2,}", lambda m: " " * len(m.group()), text)
     
-    # Replace signal dots between characters with single space
+    # Replace single dots between characters with single space
     text = re.sub(r"(?<=\w)[\.·•](?=\w)", " ", text)
 
     # Replace dots next to punctuation with single space
     text = re.sub(r"[\.·•]+(?=[^\w\s])", " ", text)
     text = re.sub(r"(?<=[^\w\s])[\.·•]+", " ", text)
 
-    # Remove dot in dot-only lines
-    text = re.sub(r"^[ \t]*[\.·•]+[ \t]*$", "", text, flags=re.MULTILINE)
-    
     # Fix special unicode spaces
     text = text.replace("\u00A0", " ")
 
@@ -65,7 +68,7 @@ def normalize_pdf_text(text):
     text = text.replace("\r", "\n")
 
     # Trim trailing spaces on each line
-    text = re.sub(r"[ \t]+$", "\n", text, flags=re.MULTILINE)
+    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
 
     # Clean extra blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
