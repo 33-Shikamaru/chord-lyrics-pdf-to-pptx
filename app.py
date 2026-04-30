@@ -70,6 +70,9 @@ def normalize_pdf_text(text):
     # Clean extra blank lines
     text = re.sub(r"\n{3,}", "\n\n", text)
 
+    # Remove page numbers
+    text = re.sub(r"(?m)^\s*\d+\s*$\n?", "", text)
+
     return text
 
 def transpose_chord(chord, steps):
