@@ -355,8 +355,6 @@ if raw_text:
 
         for i, slide in enumerate(slides):
             formatted_slide = format_slides(slide)
-
-            st.code(repr(slide))
         
             # Create a slide separator
             slides_html += f"""<div class="slide-separator">
