@@ -237,6 +237,7 @@ def load_css():
     .chord   { color: #E2B801; }
     .note    { color: #AAAAAA; }
     .lyric   { color: #FFFFFF; }
+            
     </style>
     """)
 load_css()
@@ -321,8 +322,8 @@ if raw_text:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("Editable Text")
-
+        st.subheader("Editable Text",
+                     help="• Slide break: --- (Press ⌘ + Return to apply changes) • Zoom out if chord misaligned")
         # Intialize text box once
         if "edited_text" not in st.session_state:
             st.session_state.edited_text = normalize_pdf_text(raw_text)
@@ -331,14 +332,9 @@ if raw_text:
         lines = st.session_state.edited_text.count("\n") + 1
         height = min(1000, max(400, lines * 24))
 
-        st.info("""
-        **Tips**
-        - To insert a slide break, use `---`followed by ⌘ + return (on Mac keyboard)
-        - Chord alignment off? Try zooming out or widening the window
-        """)
-
+        # Render Edited Text box
         edited_text = st.text_area(
-            "Edit text here:",
+            "",
             value=st.session_state.edited_text,
             height=height,
             key="editor"
@@ -381,6 +377,7 @@ if raw_text:
             </div>"""
 
         # Render Slide Preview
+        st.html("<div style='height: 12px;'></div>")
         st.html(f"""<div class="preview-container" style="height:{height}px;">
          {slides_html}
          </div>"""
