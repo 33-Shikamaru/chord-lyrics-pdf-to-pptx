@@ -29,12 +29,6 @@ SECTION_HEADERS = ("INTRO", "VERSE", "CHORUS", "BRIDGE", "TAG", "ENDING",
 # Accommodate for formats like "Verse 1", "Chorus 2", etc.
 SECTION_REGEX = re.compile(rf"^({'|'.join(SECTION_HEADERS)})(\s*\d+)?$", re.IGNORECASE)
 
-SECTION_COLOR = "#6EC138"
-CHORD_COLOR   = "#E2B801"
-NOTE_COLOR    = "#AAAAAA"
-LYRIC_COLOR   = "#FFFFFF"
-
-
 def extract_text_from_pdf(file):
     text = ""
     with pdfplumber.open(file) as pdf:
@@ -45,36 +39,37 @@ def extract_text_from_pdf(file):
     return text
 
 def normalize_pdf_text(text):
-    # Remove dot in dot-only lines
-    text = re.sub(r"^[ \t]*[\.·•]+[ \t]*$", "", text, flags=re.MULTILINE)
-
-    # Replace leading dot(s) with space(s)
-    text = re.sub(r"^(\s*)[\.·•]+", lambda m: m.group(1) + " " * len(m.group(0).lstrip()), text, flags=re.MULTILINE)
-
-    # Replace long runs of dots with spaces
-    text = re.sub(r"[\.·•]{2,}", lambda m: " " * len(m.group()), text)
-    
-    # Replace single dots between characters with single space
-    text = re.sub(r"(?<=\w)[\.·•](?=\w)", " ", text)
-
-    # Replace dots next to punctuation with single space
-    text = re.sub(r"[\.·•]+(?=[^\w\s])", " ", text)
-    text = re.sub(r"(?<=[^\w\s])[\.·•]+", " ", text)
-
-    # Fix special unicode spaces
-    text = text.replace("\u00A0", " ")
-
     # Normalize line endings
     text = text.replace("\r", "\n")
 
-    # Trim trailing spaces on each line
-    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
-
-    # Clean extra blank lines
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
     # Remove page numbers
     text = re.sub(r"(?m)^\s*\d+\s*$\n?", "", text)
+
+    # Remove dot-only lines
+    text = re.sub(r"(?m)^[ \t]*[\.·•]+[ \t]*$", "", text)
+
+    # Replace leading dots with spaces
+    text = re.sub(
+        r"(?m)^(\s*)([\.·•]+)",
+        lambda m: m.group(1) + (" " * len(m.group(2))),
+        text
+    )
+
+    # Replace other dot runs with spaces
+    text = re.sub(
+        r"[\.·•]+",
+        lambda m: " " * len(m.group()),
+        text
+    )
+
+    # Normalize unicode spaces
+    text = text.replace("\u00A0", " ")
+
+    # Trim trailing spaces
+    text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
+
+    # Clean excessive blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text
 
@@ -228,13 +223,24 @@ def load_css():
         font-family: monospace;
         white-space: pre;
         line-height: 1.3;
-        #margin-bottom: 10px;
+        margin-bottom: 10px;
         border-radius: 6px;
-        #text-align: left;
+        text-align: left;
     }
+                
     .slide-box div {
         white-space: pre;                
     }
+                
+    .section {
+        display: block;
+        text-align: left !important;
+    }
+                
+    .section { color: #6EC138; }
+    .chord   { color: #E2B801; }
+    .note    { color: #AAAAAA; }
+    .lyric   { color: #FFFFFF; }
     </style>
     """, unsafe_allow_html=True)
 load_css()
@@ -250,23 +256,34 @@ def split_slides(text):
 
 def format_slides(text):
     lines = text.split("\n")
-    cleaned = []
+    cleaned_lines = []
 
     for line in lines:
-        # Force section headers to left align and leave everything else as is
-        if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", line, re.IGNORECASE):
-            line = line.lstrip()
+        # Split indentation from content
+        indent = re.match(r"^(\s*)", line).group(1)
+        content = line[len(indent):]
+
+        # Section headers
+        if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", line.strip(), re.IGNORECASE):
+            formatted_line = f"<span class='section'>{line.lstrip()}</span>"
         
-        # Highlight chords
-        line = re.sub(
-            rf"\[({CHORD_PATTERN})\]",
-            lambda m: f"<span style='color:#E2B801'>{m.group()}</span>",
-            line)
+        # Note-only lines
+        elif re.match(r"^\s*\(.*\)\s*$", line):
+            formatted_line = indent + f"<span class='note'>{line}</span>"
 
-        # Wrap each line
-        cleaned.append(f"<div>{line or '&nbsp;'}</div>")
+        # Chords
+        else:
+            content = re.sub(
+                rf"\[({CHORD_PATTERN})\]",
+                lambda m: f"<span class='chord'>{m.group()}</span>",
+                content
+            )
+            formatted_line = indent + content
 
-    return "".join(cleaned)
+        # Append lines to list
+        cleaned_lines.append(formatted_line)
+
+    return "\n".join(cleaned_lines)
 
 def create_ppt(slides):
     prs = Presentation()
@@ -348,8 +365,8 @@ if raw_text:
         last_good_text = st.session_state.get("last_good_text", edited_text)
 
         if time.time() - last_edit_time > 0.3:
-            text_to_use = edited_text
-            st.session_state["last_good_text"] = edited_text
+            text_to_use = normalize_pdf_text(edited_text)
+            st.session_state["last_good_text"] = text_to_use
         else:
             text_to_use = last_good_text
 
