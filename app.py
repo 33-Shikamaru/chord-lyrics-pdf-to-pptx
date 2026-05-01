@@ -331,12 +331,13 @@ if raw_text:
         # Dynamically adjust box height based on content
         lines = st.session_state.edited_text.count("\n") + 1
         height = min(1000, max(400, lines * 24))
+        offset = 26     # to account for the Preview Slide padding  
 
         # Render Edited Text box
         edited_text = st.text_area(
             "",
             value=st.session_state.edited_text,
-            height=height,
+            height=height + offset,
             key="editor"
         )
 
