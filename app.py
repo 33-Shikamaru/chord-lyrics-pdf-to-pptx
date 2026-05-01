@@ -50,8 +50,8 @@ def normalize_pdf_text(text):
 
     # Replace leading dots with spaces
     text = re.sub(
-        r"(?m)^(\s*)([\.·•]+)",
-        lambda m: m.group(1) + (" " * len(m.group(2))),
+        r"(?m)^(\s*)([\.]+)",
+        lambda m: m.group(1) + " " * len(m.group(2)),
         text
     )
 
@@ -185,7 +185,7 @@ def detect_sections(text):
     return structured
 
 def load_css():
-    st.markdown("""
+    st.html("""
     <style>
     textarea {
         font-family: "Courier New", monospace !important;
@@ -218,18 +218,14 @@ def load_css():
 
     .slide-box {
         background-color: black;
-        padding: 20px;
         font-size: 16px;
         font-family: monospace;
         white-space: pre;
-        line-height: 1.3;
+        padding: 20px;
         margin-bottom: 10px;
         border-radius: 6px;
-        text-align: left;
-    }
-                
-    .slide-box div {
-        white-space: pre;                
+        line-height: 1.3;
+        margin: 0; 
     }
                 
     .section {
@@ -242,7 +238,7 @@ def load_css():
     .note    { color: #AAAAAA; }
     .lyric   { color: #FFFFFF; }
     </style>
-    """, unsafe_allow_html=True)
+    """)
 load_css()
 
 def split_slides(text):
@@ -265,7 +261,7 @@ def format_slides(text):
 
         # Section headers
         if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", line.strip(), re.IGNORECASE):
-            formatted_line = f"<span class='section'>{line.lstrip()}</span>"
+            formatted_line = f"<span class='section'>{content}</span>"
         
         # Note-only lines
         elif re.match(r"^\s*\(.*\)\s*$", line):
@@ -365,7 +361,7 @@ if raw_text:
         last_good_text = st.session_state.get("last_good_text", edited_text)
 
         if time.time() - last_edit_time > 0.3:
-            text_to_use = normalize_pdf_text(edited_text)
+            text_to_use = edited_text
             st.session_state["last_good_text"] = text_to_use
         else:
             text_to_use = last_good_text
@@ -385,10 +381,9 @@ if raw_text:
             </div>"""
 
         # Render Slide Preview
-        st.markdown(f"""<div class="preview-container" style="height:{height}px;">
-        {slides_html}
-        </div>""",
-            unsafe_allow_html=True
+        st.html(f"""<div class="preview-container" style="height:{height}px;">
+         {slides_html}
+         </div>"""
         )
 
     # Step 4: Export
