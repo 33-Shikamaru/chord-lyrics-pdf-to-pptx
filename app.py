@@ -23,7 +23,7 @@ NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F',
          'F#', 'G', 'G#', 'A', 'A#', 'B']
 
 SECTION_HEADERS = ("INTRO", "VERSE", "CHORUS", "BRIDGE", "TAG", "ENDING",
-                   "REFRAIN", "INSTRUMENTAL", "INTERLUDE", "VAMP",
+                   "REFRAIN", "INSTRUMENTAL", "INTERLUDE", "VAMP", "BREAKDOWN",
                    "TURNAROUND", "PRE-CHORUS", "POST-CHORUS", "OUTRO")
 
 # Accommodate for formats like "Verse 1", "Chorus 2", etc.
@@ -134,6 +134,17 @@ def convert_to_inline(text):
     
     return "\n".join(result)
 
+def detect_chord_line(text):
+    # Contains bar notation
+    if "|" in text.strip():
+        return True
+
+    # Contains many chord-like tokens (D, G2, Asus4, F#, Bm7, etc.)
+    tokens = text.strip().split()
+    chord_like = sum(bool(re.match(CHORD_PATTERN, t)) for t in tokens)
+
+    return chord_like >= max(1, len(tokens) // 2) 
+
 def detect_sections(text):
     lines = text.split("\n")
     structured = []
@@ -233,10 +244,13 @@ def load_css():
         text-align: left !important;
     }
                 
-    .section { color: #6EC138; }
-    .chord   { color: #E2B801; }
-    .note    { color: #AAAAAA; }
-    .lyric   { color: #FFFFFF; }
+    .section { color: #6EC138; }    
+    .chord   { color: #E2B801; }    
+    .note    { 
+        color: #AAAAAA;             
+        font-style: italic; 
+    }    
+    .lyric   { color: #FFFFFF; }    
             
     </style>
     """)
@@ -261,20 +275,35 @@ def format_slides(text):
         content = line[len(indent):]
 
         # Section headers
-        if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", line.strip(), re.IGNORECASE):
-            formatted_line = f"<span class='section'>{content}</span>"
+        if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", content.strip(), re.IGNORECASE):
+            formatted_line = indent + f"<span class='section'>{content}</span>"
         
-        # Note-only lines
-        elif re.match(r"^\s*\(.*\)\s*$", line):
-            formatted_line = indent + f"<span class='note'>{line}</span>"
-
-        # Chords
-        else:
+        # Chord lines
+        elif detect_chord_line(content):
+            # Style notes inside chord lines
             content = re.sub(
-                rf"\[({CHORD_PATTERN})\]",
-                lambda m: f"<span class='chord'>{m.group()}</span>",
+                r"\(.*?\)",
+                lambda m: f"<span class='note'>{m.group()}</span>",
                 content
             )
+
+            formatted_line = indent + f"<span class='chord'>{content}</span>"
+
+        # Note-only lines
+        elif re.match(r"^\s*\(.*\)\s*$", content.strip()):
+            formatted_line = indent + f"<span class='note'>{content}</span>"
+
+        else:
+            # Notes (inline)
+            content = re.sub(
+                r"\(.*?\)",
+                lambda m: f"<span class='note'>{m.group()}</span>",
+                content
+            )
+
+            # Lyrics
+            content = f"<span class='lyric'>{content}</span>"
+
             formatted_line = indent + content
 
         # Append lines to list
@@ -331,7 +360,7 @@ if raw_text:
         # Dynamically adjust box height based on content
         lines = st.session_state.edited_text.count("\n") + 1
         height = min(1000, max(400, lines * 24))
-        offset = 26     # to account for the Preview Slide padding  
+        offset = 26     # to account for the Preview Slides padding  
 
         # Render Edited Text box
         edited_text = st.text_area(
