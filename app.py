@@ -280,31 +280,18 @@ def format_slides(text):
         
         # Chord lines
         elif detect_chord_line(content):
-            # Style notes inside chord lines
-            content = re.sub(
-                r"\(.*?\)",
-                lambda m: f"<span class='note'>{m.group()}</span>",
-                content
-            )
-
             formatted_line = indent + f"<span class='chord'>{content}</span>"
 
-        # Note-only lines
-        elif re.match(r"^\s*\(.*\)\s*$", content.strip()):
-            formatted_line = indent + f"<span class='note'>{content}</span>"
-
+        # Lyrics 
         else:
-            # Notes (inline)
-            content = re.sub(
-                r"\(.*?\)",
-                lambda m: f"<span class='note'>{m.group()}</span>",
-                content
-            )
+            formatted_line = indent + f"<span class='lyric'>{content}</span>"
 
-            # Lyrics
-            content = f"<span class='lyric'>{content}</span>"
-
-            formatted_line = indent + content
+        # Notes (apply last to account for inline notes)
+        formatted_line = re.sub(
+            r"\(.*?\)",
+            lambda m: f"<span class='note'>{m.group()}</span>",
+            formatted_line
+        )
 
         # Append lines to list
         cleaned_lines.append(formatted_line)
