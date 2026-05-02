@@ -14,7 +14,7 @@ import time
 
 
 # --------------- Utilities --------------
-CHORD_PATTERN = r"[A-G][#b]?(maj|min|m|dim|aug|sus)?\d*(/[A-G][#b]?)?"
+CHORD_PATTERN = r"^[A-G](#|b)?(m|maj|min|sus|dim|aug)?\d*(\/[A-G](#|b)?)?$"
 
 # Accomodate for chord formats like "F#m", "Bbmaj7", "D/F#", etc.
 CHORD_REGEX = re.compile(rf"^({CHORD_PATTERN}\s*)+$")
