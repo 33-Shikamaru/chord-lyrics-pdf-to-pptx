@@ -256,6 +256,52 @@ def load_css():
     """)
 load_css()
 
+def split_chord_lyric_lines(lines):
+    result = []
+    
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Detect chord + lyric pair
+        if detect_chord_line(line) and i + 1 < len(lines):
+            chord_line = line
+            lyric_line = lines[i + 1]
+
+            # Handle split marker
+            if "//" in lyric_line:
+                split_idx = lyric_line.index("//")
+                lyric_clean = lyric_line.replace("//", "", 1)
+
+                # Split both lines at the same index
+                chord_parts = [
+                    chord_line[:split_idx],
+                    chord_line[split_idx:]
+                ]
+                lyric_parts = [
+                    lyric_clean[:split_idx],
+                    lyric_clean[split_idx:]
+                ]
+
+                # Append split pairs
+                for c, l in zip(chord_parts, lyric_parts):
+                    result.append(c.rstrip())
+                    result.append(l.rstrip())
+            else:
+                # No split - keep as is
+                result.append(chord_line)
+                result.append(lyric_line)
+            
+            i += 2
+        
+        else:
+            # Single line - no pairing
+            result.append(line)
+            i += 1
+        
+    return result
+
+
 def split_slides(text):
     # Normalize trailing spaces
     text = re.sub(r"[ \t]+$", "", text, flags=re.MULTILINE)
@@ -383,8 +429,19 @@ if raw_text:
         slides_html= ""
 
         for i, slide in enumerate(slides):
-            formatted_slide = format_slides(slide)
-        
+            # Split into lines
+            lines = slide.split("\n")
+
+            # Split lines on //
+            lines = split_chord_lyric_lines(lines)
+
+            # Rejoin slide
+            processed_slide = "\n".join(lines)
+
+            # Format slides
+            formatted_slide = format_slides(processed_slide)
+            formatted_slide = formatted_slide.replace("\n", "<br>")
+
             # Create a slide separator
             slides_html += f"""<div class="slide-separator">
             ──────── Slide {i+1} ────────
@@ -396,9 +453,10 @@ if raw_text:
         # Render Slide Preview
         st.html("<div style='height: 12px;'></div>")
         st.html(f"""<div class="preview-container" style="height:{height}px;">
-         {slides_html}
-         </div>"""
+       {slides_html}
+        </div>"""
         )
+
 
     # Step 4: Export
     st.header("Step 3 — Export")
