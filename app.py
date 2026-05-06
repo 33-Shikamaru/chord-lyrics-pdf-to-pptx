@@ -256,51 +256,88 @@ def load_css():
     """)
 load_css()
 
-def split_chord_lyric_lines(lines):
+def split_inline(lines):
     result = []
-    
     i = 0
+
     while i < len(lines):
         line = lines[i]
 
-        # Detect chord + lyric pair
+        # --- Case 1: Chord + lyric pair ---
         if detect_chord_line(line) and i + 1 < len(lines):
             chord_line = line
             lyric_line = lines[i + 1]
 
-            # Handle split marker
-            if "//" in lyric_line:
-                split_idx = lyric_line.index("//")
-                lyric_clean = lyric_line.replace("//", "", 1)
+            if "||" in chord_line or "||" in lyric_line:
+                source = chord_line if "||" in chord_line else lyric_line
 
-                # Split both lines at the same index
-                chord_parts = [
-                    chord_line[:split_idx],
-                    chord_line[split_idx:]
-                ]
-                lyric_parts = [
-                    lyric_clean[:split_idx],
-                    lyric_clean[split_idx:]
-                ]
+                # Find split indices
+                split_indices = []
+                idx = 0
+                while "||" in source[idx:]:
+                    pos = source.index("||", idx)
+                    split_indices.append(pos)
+                    idx = pos + 2
 
-                # Append split pairs
-                for c, l in zip(chord_parts, lyric_parts):
-                    result.append(c.rstrip())
-                    result.append(l.rstrip())
+                # Remove markers
+                chord_clean = chord_line.replace("||", "")
+                lyric_clean = lyric_line.replace("||", "")
+
+                prev = 0
+                offset = 0
+
+                for pos in split_indices:
+                    adj = pos - offset
+
+                    c_part = chord_clean[prev:adj]
+                    l_part = lyric_clean[prev:adj]
+
+                    # Preserve trailing bar if needed
+                    c_part = c_part.rstrip()
+                    if "|" in c_part and not c_part.endswith("|"):
+                        c_part += "|"
+
+                    result.append(c_part)
+                    result.append(l_part)
+
+                    prev = adj
+                    offset += 2
+
+                # Final segment
+                c_part = chord_clean[prev:]
+                l_part = lyric_clean[prev:]
+
+                c_part = c_part.rstrip()
+                if "|" in c_part and not c_part.endswith("|"):
+                    c_part += "|"
+
+                result.append(c_part)
+                result.append(l_part)
+
             else:
-                # No split - keep as is
                 result.append(chord_line)
                 result.append(lyric_line)
-            
-            i += 2
-        
-        else:
-            # Single line - no pairing
-            result.append(line)
-            i += 1
-        
-    return result
 
+            i += 2
+
+        # --- Case 2: Single line ---
+        else:
+            if "||" in line:
+                parts = line.split("||")
+
+                for p in parts:
+                    p_clean = p.rstrip()
+
+                    if "|" in p_clean and not p_clean.endswith("|"):
+                        p_clean += "|"
+
+                    result.append(p_clean)
+            else:
+                result.append(line)
+
+            i += 1
+
+    return result
 
 def split_slides(text):
     # Normalize trailing spaces
@@ -385,7 +422,7 @@ if raw_text:
 
     with col1:
         st.subheader("Editable Text",
-                     help="• Slide break: --- (Press ⌘ + Return to apply changes) • Zoom out if chord misaligned")
+                     help="• Line break: || • Slide break: --- (Press ⌘ + Return to apply changes) • Zoom out if chord misaligned")
         # Intialize text box once
         if "edited_text" not in st.session_state:
             st.session_state.edited_text = normalize_pdf_text(raw_text)
@@ -432,8 +469,8 @@ if raw_text:
             # Split into lines
             lines = slide.split("\n")
 
-            # Split lines on //
-            lines = split_chord_lyric_lines(lines)
+            # Split lines on ||
+            lines = split_inline(lines)
 
             # Rejoin slide
             processed_slide = "\n".join(lines)
