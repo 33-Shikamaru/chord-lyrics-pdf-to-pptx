@@ -38,6 +38,19 @@ FLAT_MAP = {'Db': 'C#',
             'Ab': 'G#',
             'Bb': 'A#'}
 
+# Enable display preference for flats
+DISPLAY_FLATS = {'C#': 'Db',
+                 'D#': 'Eb',
+                 'F#': 'Gb',
+                 'G#': 'Ab',
+                 'A#': 'Bb'}
+
+# Available key options for dropdown menu
+KEY_OPTIONS = [
+    "Select key...",
+    "C", "C#", "Db", "D", "D#", "Eb", "E", "F",
+    "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"]
+
 SECTION_HEADERS = ("INTRO", "VERSE", "CHORUS", "BRIDGE", "TAG", "ENDING",
                    "REFRAIN", "INSTRUMENTAL", "INTERLUDE", "VAMP", "BREAKDOWN",
                    "TURNAROUND", "PRE-CHORUS", "POST-CHORUS", "OUTRO")
@@ -89,7 +102,7 @@ def normalize_pdf_text(text):
 
     return text
 
-def transpose_text(text, steps):
+def transpose_text(text, steps, use_flats=False):
     lines = text.split("\n")
     result = []
     for line in lines:
@@ -145,7 +158,15 @@ def transpose_text(text, steps):
         
         result.append(line)
 
-    return "\n".join(result)
+    # Rebuild text 
+    result_text = "\n".join(result)
+
+    # Convert sharps -> flats for display
+    if use_flats:
+        for sharp, flat in DISPLAY_FLATS.items():
+            result_text = result_text.replace(sharp, flat)
+
+    return result_text
 
 def convert_to_inline(text):
     lines = text.split("\n")
@@ -477,12 +498,6 @@ if raw_text:
     # ----------------------
     # Key transpose section
     # ----------------------
-    KEY_OPTIONS = [
-        "Select key...",
-        "C", "C#", "D", "D#", "E", "F",
-        "F#", "G", "G#", "A", "A#", "B"
-    ]
-
     col1, col2, col3 = st.columns([1, 0.3, 1])
 
     with col1:
@@ -494,7 +509,6 @@ if raw_text:
     with col3:
         target_key = st.selectbox("Transpose To", KEY_OPTIONS[1:], disabled=(original_key == "Select key..."))
     
-
     # Normalize keys for calculation
     if original_key == "Select key...":
         steps = 0
@@ -558,6 +572,8 @@ if raw_text:
         slides = split_slides(text_to_use)
         slides_html= ""
 
+        use_flats = "b" in target_key
+
         for i, slide in enumerate(slides):
             # Split into lines
             lines = slide.split("\n")
@@ -569,7 +585,7 @@ if raw_text:
             processed_slide = "\n".join(lines)
 
             # Apply transpose
-            processed_slide = transpose_text(processed_slide, steps)
+            processed_slide = transpose_text(processed_slide, steps, use_flats=use_flats)
 
             # Format slides
             formatted_slide = format_slides(processed_slide)
@@ -589,7 +605,6 @@ if raw_text:
        {slides_html}
         </div>"""
         )
-
 
     # Step 4: Export
     st.header("Step 3 — Export")
