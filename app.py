@@ -22,11 +22,11 @@ CHORD_LINE_REGEX = re.compile(rf"^({CHORD_PATTERN}\s*)+$")
 
 # For transposing chords
 CHORD_TOKEN_REGEX = re.compile(
-    r'\b[A-G](?:#|b)?(?:m|maj7|sus4|sus2|dim|aug|add9|7|9|11|13)?(?:/[A-G](?:#|b)?)?\b'
+    r"(?<![/A-Za-z])([A-G](?:#|b)?(?:m|maj|min|sus|dim|aug|add)?\d*(?:/[A-G](?:#|b)?)?)"
 )
 
 # For transposing chords (only need notes not entire chord)
-ROOT_REGEX = r'^([A-G](?:#|b)?)'
+ROOT_REGEX = r"^([A-G](?:#|b)?)"
 
 NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F',
          'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -95,29 +95,57 @@ def transpose_text(text, steps):
     for line in lines:
         # Only transpose chord lines
         if detect_chord_line(line):
-            def repl(match):
+            
+            def transpose_match(match):
+                # Original chord text
                 chord = match.group()
-                root_match = re.match(ROOT_REGEX, chord)
+
+
+                # Split slash chords
+                if "/" in chord:
+                    main, bass = chord.split("/", 1)
+                else:
+                    main = chord
+                    bass = None
+
+                # Extract root + suffix
+                root_match = re.match(r'^([A-G](?:#|b)?)(.*)$', main)
+
                 if not root_match:
                     return chord
                 root = root_match.group(1)
+                suffix = root_match.group(2)
 
                 # Normalize flats
                 root = FLAT_MAP.get(root, root)
-                if root not in NOTES:
-                    return chord
-                idx = NOTES.index(root)
-                new_root = NOTES[(idx + steps) % 12]
 
-                # Replace only root
-                return chord.replace(root_match.group(1), new_root, 1)
+                # Transpose root
+                if root in NOTES:
+                    idx = NOTES.index(root)
+                    new_root = NOTES[(idx + steps) % 12]
+                else:
+                    new_root = root
+
+                new_chord = new_root + suffix
+
+                # Transpose bass note
+                if bass:
+                    bass = FLAT_MAP.get(bass, bass)
+                    if bass in NOTES:
+                        bass_idx = NOTES.index(bass)
+                        new_bass = NOTES[(bass_idx + steps) % 12]
+                    else:
+                        new_bass = bass
+
+                    new_chord += "/" + new_bass
+
+                return new_chord
+
+            line = CHORD_TOKEN_REGEX.sub(transpose_match, line)
         
-            line = CHORD_TOKEN_REGEX.sub(repl, line)
-    
         result.append(line)
 
     return "\n".join(result)
-
 
 def convert_to_inline(text):
     lines = text.split("\n")
