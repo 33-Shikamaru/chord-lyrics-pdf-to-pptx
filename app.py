@@ -16,11 +16,27 @@ import time
 # --------------- Utilities --------------
 CHORD_PATTERN = r"^[A-G](#|b)?(m|maj|min|sus|dim|aug)?\d*(\/[A-G](#|b)?)?$"
 
-# Accomodate for chord formats like "F#m", "Bbmaj7", "D/F#", etc.
-CHORD_REGEX = re.compile(rf"^({CHORD_PATTERN}\s*)+$")
+# For chord line detection (is this line mostly chords?)
+# Accomodate for chord formats like "F#m", "Bbmaj7", "D/F#", etc
+CHORD_LINE_REGEX = re.compile(rf"^({CHORD_PATTERN}\s*)+$")
+
+# For transposing chords
+CHORD_TOKEN_REGEX = re.compile(
+    r'\b[A-G](?:#|b)?(?:m|maj7|sus4|sus2|dim|aug|add9|7|9|11|13)?(?:/[A-G](?:#|b)?)?\b'
+)
+
+# For transposing chords (only need notes not entire chord)
+ROOT_REGEX = r'^([A-G](?:#|b)?)'
 
 NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F',
          'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+# Flat conversion map
+FLAT_MAP = {'Db': 'C#', 
+            'Eb': 'D#',
+            'Gb': 'F#',
+            'Ab': 'G#',
+            'Bb': 'A#'}
 
 SECTION_HEADERS = ("INTRO", "VERSE", "CHORUS", "BRIDGE", "TAG", "ENDING",
                    "REFRAIN", "INSTRUMENTAL", "INTERLUDE", "VAMP", "BREAKDOWN",
@@ -73,27 +89,35 @@ def normalize_pdf_text(text):
 
     return text
 
-def transpose_chord(chord, steps):
-    match = re.match(CHORD_PATTERN, chord)
-    if not match:
-        return chord
-    
-    root = match.group()
-    root = root.replace('b', '#')  # simplify flats
-    
-    if root not in NOTES:
-        return chord
-    
-    idx = NOTES.index(root)
-    new_root = NOTES[(idx + steps) % 12]
-    
-    return chord.replace(match.group(), new_root, 1)
-
 def transpose_text(text, steps):
-    def repl(match):
-        return transpose_chord(match.group(), steps)
+    lines = text.split("\n")
+    result = []
+    for line in lines:
+        # Only transpose chord lines
+        if detect_chord_line(line):
+            def repl(match):
+                chord = match.group()
+                root_match = re.match(ROOT_REGEX, chord)
+                if not root_match:
+                    return chord
+                root = root_match.group(1)
+
+                # Normalize flats
+                root = FLAT_MAP.get(root, root)
+                if root not in NOTES:
+                    return chord
+                idx = NOTES.index(root)
+                new_root = NOTES[(idx + steps) % 12]
+
+                # Replace only root
+                return chord.replace(root_match.group(1), new_root, 1)
+        
+            line = CHORD_TOKEN_REGEX.sub(repl, line)
     
-    return CHORD_REGEX.sub(repl, text)
+        result.append(line)
+
+    return "\n".join(result)
+
 
 def convert_to_inline(text):
     lines = text.split("\n")
@@ -401,7 +425,9 @@ st.set_page_config(layout="wide")
 
 st.title("🎵 Chord & Lyrics PDF → PPTX Slides")
 
+# ---------------
 # Step 1: Upload
+# ---------------
 st.header("Step 1 — Upload")
 
 uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
@@ -414,12 +440,49 @@ elif pasted_text:
 else:
     raw_text = ""
 
+# ---------------------
 # Step 2: Review & Fix
+# ---------------------
 if raw_text:
     st.header("Step 2 — Review & Fix")
 
-    col1, col2 = st.columns(2)
+    # ----------------------
+    # Key transpose section
+    # ----------------------
+    KEY_OPTIONS = [
+        "Select key...",
+        "C", "C#", "D", "D#", "E", "F",
+        "F#", "G", "G#", "A", "A#", "B"
+    ]
 
+    col1, col2, col3 = st.columns([1, 0.3, 1])
+
+    with col1:
+        original_key = st.selectbox("Original Key", KEY_OPTIONS, index=0)
+
+    with col2:
+        st.html("<div style='text-align:center;padding-top:30px;'>→</div>")
+
+    with col3:
+        target_key = st.selectbox("Transpose To", KEY_OPTIONS[1:], disabled=(original_key == "Select key..."))
+    
+
+    # Normalize keys for calculation
+    if original_key == "Select key...":
+        steps = 0
+    else:
+        calc_original = FLAT_MAP.get(original_key, original_key)
+        calc_target = FLAT_MAP.get(target_key, target_key)
+
+        steps = (
+            NOTES.index(calc_target)
+            - NOTES.index(calc_original)
+        ) % 12
+
+    # -------------------
+    # Textboxes section
+    # -------------------
+    col1, col2 = st.columns(2)
     with col1:
         st.subheader("Editable Text",
                      help="• Line break: || • Slide break: --- (Press ⌘ + Return to apply changes) • Zoom out if chord misaligned")
@@ -448,7 +511,9 @@ if raw_text:
 
         st.session_state.last_edit_time = time.time()
 
+    # -----------------------
     # Step 3: Preview Slides
+    # -----------------------
     with col2:
         st.subheader("Slide Preview")
 
@@ -474,6 +539,9 @@ if raw_text:
 
             # Rejoin slide
             processed_slide = "\n".join(lines)
+
+            # Apply transpose
+            processed_slide = transpose_text(processed_slide, steps)
 
             # Format slides
             formatted_slide = format_slides(processed_slide)
