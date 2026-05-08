@@ -2,7 +2,9 @@
 # PDF Chord and Lyric to PPTX Converter
 # ----------------------------------------
 
+# ----------------------------------------
 # ----------------- Setup ----------------
+# -----------------------------------------
 # Install dependencies in Terminal window using this command:
 # pip3 install streamlit pdfplumber python-pptx
 
@@ -12,8 +14,9 @@ import re
 from pptx import Presentation
 import time
 
-
+# ----------------------------------------
 # --------------- Utilities --------------
+# ----------------------------------------
 CHORD_PATTERN = r"^[A-G](#|b)?(m|maj|min|sus|dim|aug)?\d*(\/[A-G](#|b)?)?$"
 
 # For chord line detection (is this line mostly chords?)
@@ -469,10 +472,91 @@ def create_ppt(slides):
     return file_path
 
 
+# ----------------------------------------
+# ---------- Back-end Processes ----------
+# ----------------------------------------
+if "history" not in st.session_state:
+    st.session_state.history = []
+
+if "current_text" not in st.session_state:
+    st.session_state.current_text = ""
+
+if "last_committed_text" not in st.session_state:
+    st.session_state.last_committed_text = ""
+
+if "redo_stack" not in st.session_state:
+    st.session_state.redo_stack = []
+
+# Add keyboard listener for keyboard shortcuts
+st.components.v1.html("""
+<script>
+document.addEventListener('keydown', function(e) {
+    // Undo (Cmd/Ctrl + Z)
+    if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        const input = window.parent.document.querySelector('input[data-testid="undo-trigger"]');
+        if (input) {
+            input.value = Date.now();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
+    // Redo (Cmd/Ctrl + Shift + Z)
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        const input = window.parent.document.querySelector('input[data-testid="redo-trigger"]');
+        if (input) {
+            input.value = Date.now();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+});
+</script>
+""", height=0)
+
+
+# ----------------------------------------
 # --------------- UI / App ---------------
+# ----------------------------------------
 st.set_page_config(layout="wide")
 
 st.title("🎵 Chord & Lyrics PDF → PPTX Slides")
+
+# Hidden triggers input for keyboard shortcuts
+undo_trigger = st.text_input("undo_trigger", key="undo_trigger", label_visibility="collapsed")
+redo_trigger = st.text_input("redo_trigger", key="redo_trigger", label_visibility="collapsed")
+
+st.markdown("""
+    <style>
+    /* Hide last 2 text inputs (undo + redo) */
+    div[data-testid="stTextInput"]:nth-last-of-type(1),
+    div[data-testid="stTextInput"]:nth-last-of-type(2) {
+        display: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+if undo_trigger:
+    if st.session_state.history:
+        # Push current state to redo stack
+        st.session_state.redo_stack.append(st.session_state.current_text)
+
+        # Redo previous
+        previous = st.session_state.history.pop()
+        st.session_state.current_text = previous
+        st.session_state.last_committed_text = previous
+
+
+if redo_trigger:
+    if st.session_state.redo_stack:
+        # Save current state to history (so undo still works)
+        st.session_state.history.append(st.session_state.current_text)
+
+        # Restore redo state
+        next_state = st.session_state.redo_stack.pop()
+        st.session_state.current_text = next_state
+        st.session_state.last_committed_text = next_state
+
 
 # ---------------
 # Step 1: Upload
@@ -527,7 +611,12 @@ if raw_text:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Editable Text",
-                     help="• Line break: || • Slide break: --- (Press ⌘ + Return to apply changes) • Zoom out if chord misaligned")
+                     help="• To insert a line break, type || between the lyrics or chords. (Press Cmd + Return to apply changes)  \n" \
+                     "• To insert a slide break, type --- between two sections. (Press Cmd + Return to apply changes)  \n" \
+                     "• To undo a change, use Cmd + Z.   \n"
+                     "• To redo a change, use Cmd + Shift + Z.  \n" \
+                     "• Zoom out if chords and lyrics are misaligned.")
+        
         # Intialize text box once
         if "edited_text" not in st.session_state:
             st.session_state.edited_text = normalize_pdf_text(raw_text)
@@ -564,11 +653,31 @@ if raw_text:
         last_good_text = st.session_state.get("last_good_text", edited_text)
 
         if time.time() - last_edit_time > 0.3:
-            text_to_use = edited_text
-            st.session_state["last_good_text"] = text_to_use
-        else:
-            text_to_use = last_good_text
+            # Only commit if text change is meaningful
+            if edited_text != st.session_state.last_committed_text:
+                
+                # Save previous committed version to history
+                if st.session_state.last_committed_text:
+                    st.session_state.history.append(st.session_state.last_committed_text)
 
+                # Limit history size to prevent memory issues
+                max_history = 50
+                if len(st.session_state.history) > max_history:
+                    st.session_state.history.pop(0)
+
+                # Clear redo when new edit happens
+                st.session_state.redo_stack.clear()
+
+                # Update committed state
+                st.session_state.current_text = edited_text
+                st.session_state.last_committed_text = edited_text
+
+            text_to_use = st.session_state.current_text
+
+        else:
+            # While typing, don't commit yet
+            text_to_use = edited_text
+           
         slides = split_slides(text_to_use)
         slides_html= ""
 
