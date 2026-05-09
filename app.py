@@ -64,6 +64,7 @@ SECTION_HEADERS = ("INTRO", "VERSE", "CHORUS", "BRIDGE", "TAG", "ENDING",
 # Accommodate for formats like "Verse 1", "Chorus 2", etc.
 SECTION_REGEX = re.compile(rf"^({'|'.join(SECTION_HEADERS)})(\s*\d+)?$", re.IGNORECASE)
 
+# --------------- Functions ---------------
 def extract_text_from_pdf(file):
     text = ""
     with pdfplumber.open(file) as pdf:
@@ -173,45 +174,6 @@ def transpose_text(text, steps, use_flats=False):
             result_text = result_text.replace(sharp, flat)
 
     return result_text
-
-def convert_to_inline(text):
-    lines = text.split("\n")
-    result = []
-    
-    i = 0
-    while i < len(lines) - 1:
-        chord_line = lines[i]
-        lyric_line = lines[i + 1]
-        
-        # Detect likely chord line (many chord, few long words)
-        if re.search(rf"\b{CHORD_PATTERN}", chord_line):
-            inline = ""
-            chord_positions = []
-
-            # Find chord positions
-            for match in re.finditer(rf"\b{CHORD_PATTERN}\b", chord_line):
-                chord_positions.append((match.start(), match.group()))
-
-            # Insert chord into lyric line based on position
-            offset = 0
-            for pos, chord in chord_positions:
-                insert_pos = min(pos, len(lyric_line))
-                inline = (
-                    lyric_line[:insert_pos + offset]
-                    + f"[{chord}]"
-                    + lyric_line[insert_pos + offset:]
-                )
-            
-            result.append(inline if inline else lyric_line)
-            i += 2
-        else:
-            result.append(lines[i])
-            i += 1
-    
-    if i < len(lines):
-        result.append(lines[i])
-    
-    return "\n".join(result)
 
 def detect_chord_line(text):
     # Contains bar notation
