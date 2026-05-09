@@ -12,6 +12,9 @@ import streamlit as st
 import pdfplumber
 import re
 from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
+from io import BytesIO
 import time
 
 # ----------------------------------------
@@ -461,15 +464,50 @@ def create_ppt(slides):
     prs = Presentation()
     
     for slide_text in slides:
-        slide_layout = prs.slide_layouts[1]
-        slide = prs.slides.add_slide(slide_layout)
+        # Use a blank slide (6)
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        # Manually add a textbox
+        textbox = slide.shapes.add_textbox(
+            Inches(0.5),  # left
+            Inches(1),    # top
+            Inches(9),    # width
+            Inches(5)     # height
+        )
+
+        # Format paragraphs
+        text_frame = textbox.text_frame
+        text_frame.clear()
+
+        for i, line in enumerate(slide_text.split("\n")):
+            p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
+            p.text = line
+            p.level = 0
+            p.font.size = Pt(28)
+            
+            # Remove bullet points
+            p._element.get_or_add_pPr().remove_all('a:buChar')
         
-        slide.shapes.title.text = ""
-        slide.placeholders[1].text = slide_text
+        # Enable auto-fit
+        text_frame.word_wrap = True
+        text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+
+        # Add margins to prevent edge overflow
+        text_frame.margin_left = Inches(0.2)
+        text_frame.margin_right = Inches(0.2)
+        text_frame.margin_top = Inches(0.1)
+        text_frame.margin_bottom = Inches(0.1)
+
+        # Adjust text alignment and line spacing
+        p.alignment = PP_ALIGN.LEFT
+        p.line_spacing = 1.2
+
     
-    file_path = "/mnt/data/output.pptx"
-    prs.save(file_path)
-    return file_path
+    ppt_buffer = BytesIO()
+    prs.save(ppt_buffer)
+    ppt_buffer.seek(0)
+
+    return ppt_buffer
 
 
 # ----------------------------------------
@@ -579,9 +617,7 @@ else:
 if raw_text:
     st.header("Step 2 — Review & Fix")
 
-    # ----------------------
-    # Key transpose section
-    # ----------------------
+    # --- Key transpose section ---
     col1, col2, col3 = st.columns([1, 0.3, 1])
 
     with col1:
@@ -605,9 +641,7 @@ if raw_text:
             - NOTES.index(calc_original)
         ) % 12
 
-    # -------------------
-    # Textboxes section
-    # -------------------
+    # --- Textboxes section ---
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Editable Text",
@@ -718,13 +752,11 @@ if raw_text:
     # Step 4: Export
     st.header("Step 3 — Export")
 
-    if st.button("Generate PPTX"):
-        file_path = create_ppt(slides)
-        
-        with open(file_path, "rb") as f:
-            st.download_button(
-                label="Download PPTX",
-                data=f,
-                file_name="slides.pptx",
-                mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-            )
+    ppt_file = create_ppt(slides)
+
+    st.download_button(
+        label="⬇️ Download PPTX",
+        data=ppt_file,
+        file_name="slides.pptx",
+        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
