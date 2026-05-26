@@ -14,6 +14,7 @@ import re
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
+from pptx.dml.color import RGBColor
 from io import BytesIO
 import time
 
@@ -422,12 +423,22 @@ def format_slides(text):
 
     return "\n".join(cleaned_lines)
 
+COLOR_SECTION = RGBColor(0x6E, 0xC1, 0x38)  # green
+COLOR_CHORD   = RGBColor(0xE2, 0xB8, 0x01)  # yellow/gold
+COLOR_LYRIC   = RGBColor(0xFF, 0xFF, 0xFF)  # white
+COLOR_NOTE    = RGBColor(0xAA, 0xAA, 0xAA)  # gray
+
 def create_ppt(slides):
     prs = Presentation()
-    
+
     for slide_text in slides:
         # Use a blank slide (6)
         slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+        # Black background to match preview
+        bg = slide.background.fill
+        bg.solid()
+        bg.fore_color.rgb = RGBColor(0x00, 0x00, 0x00)
 
         # Manually add a textbox
         textbox = slide.shapes.add_textbox(
@@ -443,15 +454,34 @@ def create_ppt(slides):
 
         for i, line in enumerate(slide_text.split("\n")):
             p = text_frame.add_paragraph() if i > 0 else text_frame.paragraphs[0]
-            p.text = line
             p.level = 0
-            p.font.size = Pt(28)
-            p.font.name = "Menlo"
             p.alignment = PP_ALIGN.LEFT
             p.line_spacing = 1.2
-
-            # Remove bullet points
             p._element.get_or_add_pPr().remove_all('a:buChar')
+
+            # Determine base color for this line
+            content = line.strip()
+            if re.match(rf"^\s*({'|'.join(SECTION_HEADERS)})(\s*\d+)?\s*:?", content, re.IGNORECASE):
+                base_color = COLOR_SECTION
+            elif detect_chord_line(content) and content:
+                base_color = COLOR_CHORD
+            else:
+                base_color = COLOR_LYRIC
+
+            # Split line into regular segments and parenthetical notes
+            segments = re.split(r'(\(.*?\))', line)
+            for segment in segments:
+                if not segment:
+                    continue
+                run = p.add_run()
+                run.text = segment
+                run.font.size = Pt(28)
+                run.font.name = "Menlo"
+                if segment.startswith('(') and segment.endswith(')'):
+                    run.font.color.rgb = COLOR_NOTE
+                    run.font.italic = True
+                else:
+                    run.font.color.rgb = base_color
 
         # Enable auto-fit
         text_frame.word_wrap = True
@@ -463,7 +493,6 @@ def create_ppt(slides):
         text_frame.margin_top = Inches(0.1)
         text_frame.margin_bottom = Inches(0.1)
 
-    
     ppt_buffer = BytesIO()
     prs.save(ppt_buffer)
     ppt_buffer.seek(0)
