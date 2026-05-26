@@ -446,10 +446,13 @@ def create_ppt(slides):
             p.text = line
             p.level = 0
             p.font.size = Pt(28)
-            
+            p.font.name = "Menlo"
+            p.alignment = PP_ALIGN.LEFT
+            p.line_spacing = 1.2
+
             # Remove bullet points
             p._element.get_or_add_pPr().remove_all('a:buChar')
-        
+
         # Enable auto-fit
         text_frame.word_wrap = True
         text_frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
@@ -459,10 +462,6 @@ def create_ppt(slides):
         text_frame.margin_right = Inches(0.2)
         text_frame.margin_top = Inches(0.1)
         text_frame.margin_bottom = Inches(0.1)
-
-        # Adjust text alignment and line spacing
-        p.alignment = PP_ALIGN.LEFT
-        p.line_spacing = 1.2
 
     
     ppt_buffer = BytesIO()
@@ -679,6 +678,8 @@ if raw_text:
 
         use_flats = "b" in target_key
 
+        processed_slides = []
+
         for i, slide in enumerate(slides):
             # Split into lines
             lines = slide.split("\n")
@@ -691,6 +692,9 @@ if raw_text:
 
             # Apply transpose
             processed_slide = transpose_text(processed_slide, steps, use_flats=use_flats)
+
+            # Store processed slide for export
+            processed_slides.append(processed_slide)
 
             # Format slides
             formatted_slide = format_slides(processed_slide)
@@ -714,7 +718,7 @@ if raw_text:
     # Step 4: Export
     st.header("Step 3 — Export")
 
-    ppt_file = create_ppt(slides)
+    ppt_file = create_ppt(processed_slides)
 
     st.download_button(
         label="⬇️ Download PPTX",
